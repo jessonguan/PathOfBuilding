@@ -467,13 +467,20 @@ end
 --- Fetches the list of all available leagues using trade league API
 ---@param realm string
 ---@param callback fun(query:table, errMsg:string)
-function TradeQueryRequestsClass:FetchLeagues(realm, callback)
-	local header = "Authorization: Bearer " .. (main.api.authToken or "")
+---@param hostName? string Optional trade site root, e.g. "https://poe.game.qq.com/"
+function TradeQueryRequestsClass:FetchLeagues(realm, callback, hostName)
+	local isInternational = hostName == nil
+	hostName = hostName or self.hostName
+	local params = { }
+	if isInternational then
+		params.header = "Authorization: Bearer " .. (main.api.authToken or "")
+	end
+	local fallbackLeagues = isInternational and {"Standard", "Hardcore"} or {"永久"}
 	launch:DownloadPage(
-			self.hostName .. "api/trade/data/leagues",
+			hostName .. "api/trade/data/leagues",
 			function(response, errMsg)
 				if errMsg then
-					return callback({"Standard", "Hardcore"}, errMsg)
+					return callback(fallbackLeagues, errMsg)
 				end
 				local json_data = dkjson.decode(response.body)
 				if not json_data or json_data.error then
@@ -482,7 +489,7 @@ function TradeQueryRequestsClass:FetchLeagues(realm, callback)
 					if type(apiError) == "table" then
 						errMsg = apiError.message or (apiError.code and tostring(apiError.code)) or "Failed to parse trade leagues JSON"
 					end
-					return callback({"Standard", "Hardcore"}, errMsg)
+					return callback(fallbackLeagues, errMsg)
 				end
 				local leagues = {}
 				for _, value in pairs(json_data.result) do
@@ -492,7 +499,7 @@ function TradeQueryRequestsClass:FetchLeagues(realm, callback)
 				end
 				callback(leagues, errMsg)
 			end,
-			{header = header}
+			params
 	)
 end
 

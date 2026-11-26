@@ -17,6 +17,7 @@ local m_floor = math.floor
 local m_abs = math.abs
 local s_format = string.format
 local tradeHelpers = require("Classes.TradeHelpers")
+local tradeItemNameMap = require("Classes.TradeItemNameMap")
 local dkjson = require "dkjson"
 
 ---@class TreeTab: ControlHost
@@ -2232,8 +2233,8 @@ function TreeTabClass:FindTimelessJewel()
 		{ edgePadding*2 + listWidth, -(buttonHeight + edgePadding * 2), listWidth, listHeight }, self.build)
 	self.tradeQueryRequests = new("TradeQueryRequests"):TradeQueryRequests()
 	controls.msg = new("LabelControl"):LabelControl(nil, { -280, 5, 0, 20 }, "")
-	controls.searchTradeButton = new("ButtonControl"):ButtonControl({ "BOTTOMRIGHT", controls.searchResults, "TOPRIGHT" }, { 0, -rowSpacing, 170, buttonHeight }, "Open Trade URL", function()
-		local seedTrades = {}
+
+	local function getTimelessTradeRange()
 		local startRow, endRow
 		if controls.searchResults.highlightIndex and not controls.searchMore.state then
 			startRow = m_min(controls.searchResults.selIndex, controls.searchResults.highlightIndex)
@@ -2243,30 +2244,14 @@ function TreeTabClass:FindTimelessJewel()
 			local maxFilters = controls.searchMore.state and 180 or 10
 			endRow = startRow + m_floor(maxFilters / ((timelessData.sharedResults.conqueror.id == 1) and 3 or 1))
 		end
-		
-
 		local seedCount = m_min(#timelessData.searchResults - startRow, endRow - startRow) + 1
-		-- update if not highlighted already
+		return startRow, endRow, seedCount
+	end
 
-		local prevSearch = controls.searchTradeButton.lastSearch
-		if prevSearch and prevSearch[1] == startRow and prevSearch[2] == seedCount then
-			startRow = endRow + 1
-			if (startRow > #timelessData.searchResults) then
-				return
-			end
-			seedCount = m_min(#timelessData.searchResults - startRow + 1, seedCount)
-			endRow = startRow + seedCount - 1
-		end
-		controls.searchResults.selIndex = startRow
-		-- scroll so that startRow is the first visible row
-		controls.searchResults:ScrollToIndex(startRow)
-		controls.searchResults.highlightIndex = endRow
-
-		controls.searchTradeButton.lastSearch = {startRow, seedCount}
-
+	local function buildTimelessSeedFilters(startRow, seedCount)
+		local seedTrades = {}
 		for i = startRow, startRow + seedCount - 1 do
 			local result = timelessData.searchResults[i]
-
 			local conquerorKeystoneTradeIds = data.timelessJewelTradeIDs[timelessData.jewelType.id].keystone
 			local conquerorTradeIds
 			if timelessData.jewelType.id >= 7 then
@@ -2276,7 +2261,6 @@ function TreeTabClass:FindTimelessJewel()
 			else
 				conquerorTradeIds = { conquerorKeystoneTradeIds[1], conquerorKeystoneTradeIds[2], conquerorKeystoneTradeIds[3] }
 			end
-
 			for _, tradeId in ipairs(conquerorTradeIds) do
 				t_insert(seedTrades, {
 					id = tradeId,
@@ -2287,7 +2271,10 @@ function TreeTabClass:FindTimelessJewel()
 				})
 			end
 		end
+		return seedTrades
+	end
 
+	local function buildTimelessSearch(seedTrades)
 		local tradeTypes = {
 			"securable",
 			"available",
@@ -2309,7 +2296,6 @@ function TreeTabClass:FindTimelessJewel()
 				}
 			}
 		}
-
 		if data.timelessJewelTradeIDs[timelessData.jewelType.id].devotion ~= nil then
 			local devotionFilters = {}
 			if timelessData.sharedResults.devotionVariant1.id > 1 then
@@ -2325,6 +2311,34 @@ function TreeTabClass:FindTimelessJewel()
 				})
 			end
 		end
+		return search
+	end
+
+	controls.searchTradeButton = new("ButtonControl"):ButtonControl({ "BOTTOMRIGHT", controls.searchResults, "TOPRIGHT" }, { 0, -rowSpacing, 170, buttonHeight }, "Open Trade URL", function()
+		local startRow, endRow, seedCount = getTimelessTradeRange()
+		
+
+		-- update if not highlighted already
+
+		local prevSearch = controls.searchTradeButton.lastSearch
+		if prevSearch and prevSearch[1] == startRow and prevSearch[2] == seedCount then
+			startRow = endRow + 1
+			if (startRow > #timelessData.searchResults) then
+				return
+			end
+			seedCount = m_min(#timelessData.searchResults - startRow + 1, seedCount)
+			endRow = startRow + seedCount - 1
+		end
+		controls.searchResults.selIndex = startRow
+		-- scroll so that startRow is the first visible row
+		controls.searchResults:ScrollToIndex(startRow)
+		controls.searchResults.highlightIndex = endRow
+
+		controls.searchTradeButton.lastSearch = {startRow, seedCount}
+
+		local seedTrades = buildTimelessSeedFilters(startRow, seedCount)
+
+		local search = buildTimelessSearch(seedTrades)
 
 		local url = self.tradeQueryRequests:buildUrl("https://www.pathofexile.com/trade/search",
 			controls.realmSelection:GetSelValue():lower(), controls.searchTradeLeagueSelect:GetSelValue(),
@@ -2344,6 +2358,68 @@ function TreeTabClass:FindTimelessJewel()
 		tooltip:AddLine(16, "^7After selecting a row You can also shift+click on another row to select a range of rows to search.")
 	end
 
+	controls.searchTradeCnButton = new("ButtonControl"):ButtonControl({ "BOTTOMRIGHT", controls.searchTradeButton, "TOPRIGHT" }, { 0, -rowSpacing, 170, buttonHeight }, "国服搜索链接", function()
+		local startRow, _, seedCount = getTimelessTradeRange()
+		local search = buildTimelessSearch(buildTimelessSeedFilters(startRow, seedCount))
+
+		-- Use the localized jewel name as the unique name filter, and translate
+		-- any other English item name fields present in the query.
+		local localizedName = tradeItemNameMap.translateName(timelessData.jewelType.label)
+		if localizedName then
+			search.name = localizedName
+		end
+		tradeItemNameMap.translateQuery(search)
+
+		local league = controls.searchTradeCnLeagueSelect:GetSelValue()
+		if not league then
+			return
+		end
+		local url = self.tradeQueryRequests:buildUrl("https://poe.game.qq.com/trade/search", nil, league,
+			tradeHelpers.B64GzipEncode(dkjson.encode(search)))
+		OpenURL(url)
+		Copy(url)
+	end)
+	controls.searchTradeCnButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
+	controls.searchTradeCnButton.tooltipFunc = function(tooltip)
+		tooltip:Clear()
+		tooltip:AddLine(16, "^7打开国服市集搜索链接（poe.game.qq.com），并复制到剪贴板。")
+		tooltip:AddLine(16, "^7赛季使用国服赛季列表，查询条件与国际服保持一致。")
+	end
+
+	controls.searchTradeCnLeagueSelect = new("DropDownControl"):DropDownControl({ "RIGHT", controls.searchTradeCnButton, "LEFT" },
+		{ -labelSpacing, 0, 140, buttonHeight }, nil, function(idx, val)
+		self.timelessJewelCnLeagueSelect = val
+	end)
+	controls.searchTradeCnLeagueLabel = new("LabelControl"):LabelControl({ "TOPRIGHT", controls.searchTradeCnLeagueSelect, "TOPLEFT" },
+		{ -labelSpacing, 0, 0, labelHeight }, "^7国服赛季:")
+
+	self.cnTradeLeaguesList = self.cnTradeLeaguesList or { }
+	local function updateCnLeagues()
+		if #self.cnTradeLeaguesList > 0 then
+			controls.searchTradeCnLeagueSelect:SetList(self.cnTradeLeaguesList)
+			for i, league in ipairs(self.cnTradeLeaguesList) do
+				if league == self.timelessJewelCnLeagueSelect then
+					controls.searchTradeCnLeagueSelect:SetSel(i)
+					break
+				end
+			end
+			return
+		end
+		self.tradeQueryRequests:FetchLeagues("pc", function(leagues, errMsg)
+			if errMsg then
+				controls.msg.label = "^1Error fetching CN league list\n" .. errMsg .. "^7"
+				return
+			end
+			self.cnTradeLeaguesList = leagues
+			controls.searchTradeCnLeagueSelect:SetList(leagues)
+			if #leagues > 0 then
+				controls.searchTradeCnLeagueSelect:SetSel(1)
+				self.timelessJewelCnLeagueSelect = leagues[1]
+			end
+		end, "https://poe.game.qq.com/")
+	end
+	updateCnLeagues()
+
 	controls.searchTradeLeagueSelect = new("DropDownControl"):DropDownControl({ "RIGHT", controls.searchTradeButton, "LEFT" },
 		{ -labelSpacing, 0, 140, buttonHeight }, nil, function(idx, val)
 		self.timelessJewelLeagueSelect = val
@@ -2354,8 +2430,8 @@ function TreeTabClass:FindTimelessJewel()
 	self.realmList = {
 		"PC", "Sony", "Xbox"
 	}
-	controls.realmSelection = new("DropDownControl"):DropDownControl({ "BOTTOMLEFT", controls.searchTradeLeagueSelect, "TOPLEFT" },
-		{ 0, -rowSpacing, 50, buttonHeight }, self.realmList, nil)
+	controls.realmSelection = new("DropDownControl"):DropDownControl({ "RIGHT", controls.searchTradeLeagueLabel, "LEFT" },
+		{ -labelSpacing, 0, 50, buttonHeight }, self.realmList, nil)
 	local function updateLeagues()
 		local currentRealmId = controls.realmSelection:GetSelValue():lower()
 		if self.tradeLeaguesList[currentRealmId] == nil then self.tradeLeaguesList[currentRealmId] = {} end
@@ -2419,7 +2495,7 @@ function TreeTabClass:FindTimelessJewel()
 		"In person (online)",
 		"Any (includes offline)"
 	}
-	controls.tradeTypeSelection = new("DropDownControl"):DropDownControl({ "BOTTOMRIGHT", controls.searchTradeButton, "TOPRIGHT" },
+	controls.tradeTypeSelection = new("DropDownControl"):DropDownControl({ "BOTTOMRIGHT", controls.searchTradeCnButton, "TOPRIGHT" },
 		{ 0, -rowSpacing, 205, buttonHeight }, tradeTypes, function(index, value)
 			self.tradeTypeIndex = index
 		end)
@@ -2812,6 +2888,7 @@ function TreeTabClass:FindTimelessJewel()
 		controls.abyssAscendancySelect.selIndex = 1
 		wipeTable(timelessData.searchResults)
 		controls.searchTradeButton.enabled = false
+		controls.searchTradeCnButton.enabled = false
 		setAllocatedNodes()
 	end)
 	controls.closeButton = new("ButtonControl"):ButtonControl({"LEFT", controls.resetButton, "RIGHT"}, {buttonDivider, 0, buttonWidth, buttonHeight}, "Cancel", function()
@@ -2851,6 +2928,7 @@ function TreeTabClass:FindTimelessJewel()
 			end)
 			
 			controls.searchTradeButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
+			controls.searchTradeCnButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
 			controls.searchTradeButton.lastSearch = nil
 			controls.searchTradeButton.label = "Open Trade URL"
 			controls.searchResults.highlightIndex = nil
@@ -2876,6 +2954,7 @@ function TreeTabClass:FindTimelessJewel()
 				end
 				t_sort(timelessData.searchResults, function(a, b) return a.total > b.total end)
 				controls.searchTradeButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
+				controls.searchTradeCnButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
 				controls.searchTradeButton.lastSearch = nil
 				controls.searchTradeButton.label = "Open Trade URL"
 				controls.searchResults.highlightIndex = nil

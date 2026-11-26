@@ -1,0 +1,4 @@
+[submodule "vendor/awakened-poe-trade"]
+	path = vendor/awakened-poe-trade
+	url = https://github.com/DonkiChen/Awakened-PoE-Trade-Simplified-Chinese.git
+	branch = master
