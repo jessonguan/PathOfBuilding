@@ -205,12 +205,13 @@
 	<File name="Classes/Tooltip.lua" part="program" sha1="f14a4fb80c142bebf3ee88b8a97f7dcbb519aa17" />
 	<File name="Classes/TooltipHost.lua" part="program" sha1="0f5706e242368618e2c4d17de63e41653a1d0d5f" />
 	<File name="Classes/TradeHelpers.lua" part="program" sha1="981b58d794cad03f595bdd64e57274fa008bf45d" />
+	<File name="Classes/TradeItemNameMap.lua" part="program" sha1="463bfb2c0c2df41abd74626f8cb0f053175557d6" />
 	<File name="Classes/TradeQuery.lua" part="program" sha1="e36064670a7ee1cca228d32ae9266fa7a7c02ef4" />
 	<File name="Classes/TradeQueryGenerator.lua" part="program" sha1="59f48443fffa9beac3dd71c7323ef1bb778be0de" />
 	<File name="Classes/TradeQueryRateLimiter.lua" part="program" sha1="2e0853cc35292f769040c1104e7877f791a79c0c" />
-	<File name="Classes/TradeQueryRequests.lua" part="program" sha1="a70ccb5bbaff3a951d3280b9f73988ecc60e85ea" />
+	<File name="Classes/TradeQueryRequests.lua" part="program" sha1="0285d3bde4551ce5177311186ce1156fac1cfa00" />
 	<File name="Classes/TradeStatWeightMultiplierListControl.lua" part="program" sha1="b83a9eb1dad0e363acb3ce0cd28bb5e43fe08ced" />
-	<File name="Classes/TreeTab.lua" part="program" sha1="b77368ada34d4556baeb292066a141fa324ce22b" />
+	<File name="Classes/TreeTab.lua" part="program" sha1="84b836be4074791460626fd12a23a1b54c790487" />
 	<File name="Classes/UndoHandler.lua" part="program" sha1="586afba2e6fea36e34c1109d21498bd86d6ead93" />
 	<File name="Data/Bases/amulet.lua" part="program" sha1="6c567cde1c73f313dc4a5d215adaf72a86db722c" />
 	<File name="Data/Bases/axe.lua" part="program" sha1="ceb8668a588ecf02aaf0babee9e9908317cba58f" />
@@ -365,6 +366,8 @@
 	<File name="Data/TimelessJewelData/LethalPride.zip" part="program" sha1="dff1882f616d578bee2e83a6928a7b3234e624b2" />
 	<File name="Data/TimelessJewelData/MilitantFaith.zip" part="program" sha1="4060fe21f5bbbb33928c6cc402d36952810bdb8f" />
 	<File name="Data/TimelessJewelData/NodeIndexMapping.lua" part="program" sha1="b1eb2eac6ff329b1cc2d10098de2f575d1557c08" />
+	<File name="Data/Trade/zh_CN/items.ndjson" part="program" sha1="f586002d24d8deb8944fd496666db9937a92e5a8" />
+	<File name="Data/Trade/zh_CN/LeagueLabels.lua" part="program" sha1="d10b0a9f58644496381fbd45f45e464e2bae60eb" />
 	<File name="Data/TradeSiteStats.lua" part="program" sha1="d809af26d6eb86149149a12277d77277217b4f93" />
 	<File name="Data/Uniques/amulet.lua" part="program" sha1="37fc90367800dabad70cfea5b5c2bb5784404ae7" />
 	<File name="Data/Uniques/axe.lua" part="program" sha1="1a26fccf12bef1d20e51f11236a6063438bdf159" />

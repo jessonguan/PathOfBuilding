@@ -2314,6 +2314,21 @@ function TreeTabClass:FindTimelessJewel()
 		return search
 	end
 
+	local function isTencentRealm()
+		return controls.realmSelection ~= nil and controls.realmSelection:GetSelValue() == "Tencent"
+	end
+
+	-- The CN trade site (Tencent realm) has its own league list and wording, so
+	-- the league selector and the generate button are relabelled for it.
+	local function updateTradeButtonLabel(nextPage)
+		local isTencent = isTencentRealm()
+		if nextPage then
+			controls.searchTradeButton.label = isTencent and "Open Next CN URL" or "Open Next Trade URL"
+		else
+			controls.searchTradeButton.label = isTencent and "Open CN Trade URL" or "Open Trade URL"
+		end
+	end
+
 	controls.searchTradeButton = new("ButtonControl"):ButtonControl({ "BOTTOMRIGHT", controls.searchResults, "TOPRIGHT" }, { 0, -rowSpacing, 170, buttonHeight }, "Open Trade URL", function()
 		local startRow, endRow, seedCount = getTimelessTradeRange()
 		
@@ -2340,13 +2355,39 @@ function TreeTabClass:FindTimelessJewel()
 
 		local search = buildTimelessSearch(seedTrades)
 
-		local url = self.tradeQueryRequests:buildUrl("https://www.pathofexile.com/trade/search",
-			controls.realmSelection:GetSelValue():lower(), controls.searchTradeLeagueSelect:GetSelValue(),
+		-- The league dropdown shows display labels for CN, so the selected index
+		-- is resolved back to the real league name used in the URL.
+		local leagueIndex = controls.searchTradeLeagueSelect.selIndex or 1
+		local league = (self.currentLeagueList and self.currentLeagueList[leagueIndex])
+			or controls.searchTradeLeagueSelect:GetSelValue()
+		if not league then
+			return
+		end
+		local realmValue = controls.realmSelection:GetSelValue()
+		local isTencent = realmValue == "Tencent"
+		local hostName = "https://www.pathofexile.com/trade/search"
+		local realmParam = realmValue:lower()
+		if isTencent then
+			-- The CN trade site lives on a different host and expects no realm
+			-- segment, and its item names are localized.
+			hostName = "https://poe.game.qq.com/trade/search"
+			realmParam = nil
+			local localizedName = tradeItemNameMap.translateName(timelessData.jewelType.label)
+			if localizedName then
+				search.name = localizedName
+			end
+			local localizedType = tradeItemNameMap.translateName("Timeless Jewel")
+			if localizedType then
+				search.type = localizedType
+			end
+			tradeItemNameMap.translateQuery(search)
+		end
+		local url = self.tradeQueryRequests:buildUrl(hostName, realmParam, league,
 			tradeHelpers.B64GzipEncode(dkjson.encode(search)))
 		OpenURL(url)
 		Copy(url)
 
-		controls.searchTradeButton.label = "Open Next Trade URL"
+		updateTradeButtonLabel(true)
 	end)
 	controls.searchTradeButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
 	controls.searchTradeButton.tooltipFunc = function(tooltip, mode, index, value)
@@ -2356,69 +2397,9 @@ function TreeTabClass:FindTimelessJewel()
 		tooltip:AddLine(16, "")
 		tooltip:AddLine(16, "^7You can click to select a row so that search begins from there.")
 		tooltip:AddLine(16, "^7After selecting a row You can also shift+click on another row to select a range of rows to search.")
+		tooltip:AddLine(16, "")
+		tooltip:AddLine(16, "^7Realm \"Tencent\" opens the CN trade site (poe.game.qq.com) and uses zh_CN item names.")
 	end
-
-	controls.searchTradeCnButton = new("ButtonControl"):ButtonControl({ "BOTTOMRIGHT", controls.searchTradeButton, "TOPRIGHT" }, { 0, -rowSpacing, 170, buttonHeight }, "国服搜索链接", function()
-		local startRow, _, seedCount = getTimelessTradeRange()
-		local search = buildTimelessSearch(buildTimelessSeedFilters(startRow, seedCount))
-
-		-- Use the localized jewel name as the unique name filter, and translate
-		-- any other English item name fields present in the query.
-		local localizedName = tradeItemNameMap.translateName(timelessData.jewelType.label)
-		if localizedName then
-			search.name = localizedName
-		end
-		tradeItemNameMap.translateQuery(search)
-
-		local league = controls.searchTradeCnLeagueSelect:GetSelValue()
-		if not league then
-			return
-		end
-		local url = self.tradeQueryRequests:buildUrl("https://poe.game.qq.com/trade/search", nil, league,
-			tradeHelpers.B64GzipEncode(dkjson.encode(search)))
-		OpenURL(url)
-		Copy(url)
-	end)
-	controls.searchTradeCnButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
-	controls.searchTradeCnButton.tooltipFunc = function(tooltip)
-		tooltip:Clear()
-		tooltip:AddLine(16, "^7打开国服市集搜索链接（poe.game.qq.com），并复制到剪贴板。")
-		tooltip:AddLine(16, "^7赛季使用国服赛季列表，查询条件与国际服保持一致。")
-	end
-
-	controls.searchTradeCnLeagueSelect = new("DropDownControl"):DropDownControl({ "RIGHT", controls.searchTradeCnButton, "LEFT" },
-		{ -labelSpacing, 0, 140, buttonHeight }, nil, function(idx, val)
-		self.timelessJewelCnLeagueSelect = val
-	end)
-	controls.searchTradeCnLeagueLabel = new("LabelControl"):LabelControl({ "TOPRIGHT", controls.searchTradeCnLeagueSelect, "TOPLEFT" },
-		{ -labelSpacing, 0, 0, labelHeight }, "^7国服赛季:")
-
-	self.cnTradeLeaguesList = self.cnTradeLeaguesList or { }
-	local function updateCnLeagues()
-		if #self.cnTradeLeaguesList > 0 then
-			controls.searchTradeCnLeagueSelect:SetList(self.cnTradeLeaguesList)
-			for i, league in ipairs(self.cnTradeLeaguesList) do
-				if league == self.timelessJewelCnLeagueSelect then
-					controls.searchTradeCnLeagueSelect:SetSel(i)
-					break
-				end
-			end
-			return
-		end
-		self.tradeQueryRequests:FetchLeagues("pc", function(leagues, errMsg)
-			if errMsg then
-				controls.msg.label = "^1Error fetching CN league list\n" .. errMsg .. "^7"
-				return
-			end
-			self.cnTradeLeaguesList = leagues
-			controls.searchTradeCnLeagueSelect:SetList(leagues)
-			if #leagues > 0 then
-				controls.searchTradeCnLeagueSelect:SetSel(1)
-				self.timelessJewelCnLeagueSelect = leagues[1]
-			end
-		end, "https://poe.game.qq.com/")
-	end
-	updateCnLeagues()
 
 	controls.searchTradeLeagueSelect = new("DropDownControl"):DropDownControl({ "RIGHT", controls.searchTradeButton, "LEFT" },
 		{ -labelSpacing, 0, 140, buttonHeight }, nil, function(idx, val)
@@ -2428,27 +2409,70 @@ function TreeTabClass:FindTimelessJewel()
 		{ -labelSpacing, 0, 0, labelHeight }, "^7League:")
 	-- Realm selection
 	self.realmList = {
-		"PC", "Sony", "Xbox"
+		"Tencent", "PC", "Sony", "Xbox"
 	}
 	controls.realmSelection = new("DropDownControl"):DropDownControl({ "RIGHT", controls.searchTradeLeagueLabel, "LEFT" },
-		{ -labelSpacing, 0, 50, buttonHeight }, self.realmList, nil)
+		{ -labelSpacing, 0, 90, buttonHeight }, self.realmList, nil)
 	local function updateLeagues()
-		local currentRealmId = controls.realmSelection:GetSelValue():lower()
+		local realmValue = controls.realmSelection:GetSelValue()
+		local currentRealmId = realmValue:lower()
+		local isTencent = realmValue == "Tencent"
 		if self.tradeLeaguesList[currentRealmId] == nil then self.tradeLeaguesList[currentRealmId] = {} end
 		local leagueList = self.tradeLeaguesList[currentRealmId]
-		if leagueList and #leagueList > 0 then
-			controls.searchTradeLeagueSelect:SetList(leagueList)
-			-- restore the last league selected
-			for i, league in ipairs(leagueList) do
-				if league == self.timelessJewelLeagueSelect then
-					controls.searchTradeLeagueSelect:SetSel(i)
-					break
+
+		-- The UI font has no CJK glyphs, so CN league names are displayed in a
+		-- transliterated ASCII form while the trade URL keeps the CN name.
+		local leagueLabelTokens = require("Data.Trade.zh_CN.LeagueLabels")
+
+		local function toAsciiLeagueLabel(name, index)
+			local label = name
+			for _, token in ipairs(leagueLabelTokens) do
+				label = label:gsub(token[1], token[2])
+			end
+			label = label:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+			if label == "" or label:find("[\128-\255]") then
+				return "League " .. tostring(index)
+			end
+			return label
+		end
+
+		local function setLeagueList(leagueValues, defaultIndex)
+			local labels = leagueValues
+			if isTencent then
+				labels = {}
+				for i, name in ipairs(leagueValues) do
+					labels[i] = toAsciiLeagueLabel(name, i)
 				end
 			end
+			self.currentLeagueList = leagueValues
+			controls.searchTradeLeagueSelect:SetList(labels)
+			-- restore the last league selected
+			for i, label in ipairs(labels) do
+				if label == self.timelessJewelLeagueSelect then
+					controls.searchTradeLeagueSelect:SetSel(i)
+					return
+				end
+			end
+			if defaultIndex then
+				controls.searchTradeLeagueSelect:SetSel(defaultIndex)
+			end
+		end
+
+		if leagueList and #leagueList > 0 then
+			setLeagueList(leagueList)
 		else
-			self.tradeQueryRequests:FetchLeagues(currentRealmId, function(leagues, errMsg)
+			-- The Tencent realm runs the CN trade site, which has its own league
+			-- list and uses "pc" as its realm code.
+			local apiRealm = isTencent and "pc" or currentRealmId
+			local hostName = isTencent and "https://poe.game.qq.com/" or nil
+			self.tradeQueryRequests:FetchLeagues(apiRealm, function(leagues, errMsg)
 				if errMsg then
 					controls.msg.label = "^1Error fetching league list, default league will be used\n" .. errMsg .. "^7"
+					return
+				end
+				if isTencent then
+					self.tradeLeaguesList[currentRealmId] = leagues
+					setLeagueList(leagues, 1)
 					return
 				end
 				local tempLeagueTable = {}
@@ -2471,12 +2495,19 @@ function TreeTabClass:FindTimelessJewel()
 				t_insert(leagueList, "Hardcore")
 				t_insert(leagueList, "Ruthless")
 				t_insert(leagueList, "Hardcore Ruthless")
-				controls.searchTradeLeagueSelect:SetList(leagueList)
-			end)
+				setLeagueList(leagueList)
+			end, hostName)
 		end
 	end
 	controls.realmSelection.selFunc = function(idx, _)
 		self.selectedRealmIndex = idx
+		-- The CN trade site (Tencent) has its own league list and wording, so the
+		-- league selector and the generate button are relabelled for it.
+		local isTencent = self.realmList[idx] == "Tencent"
+		controls.searchTradeLeagueLabel.label = isTencent and "^7CN League:" or "^7League:"
+		-- leagues differ per realm, so restart the trade URL sequence
+		controls.searchTradeButton.lastSearch = nil
+		controls.searchTradeButton.label = isTencent and "Open CN Trade URL" or "Open Trade URL"
 		updateLeagues()
 	end
 	-- remember previous choice
@@ -2495,7 +2526,7 @@ function TreeTabClass:FindTimelessJewel()
 		"In person (online)",
 		"Any (includes offline)"
 	}
-	controls.tradeTypeSelection = new("DropDownControl"):DropDownControl({ "BOTTOMRIGHT", controls.searchTradeCnButton, "TOPRIGHT" },
+	controls.tradeTypeSelection = new("DropDownControl"):DropDownControl({ "BOTTOMRIGHT", controls.searchTradeButton, "TOPRIGHT" },
 		{ 0, -rowSpacing, 205, buttonHeight }, tradeTypes, function(index, value)
 			self.tradeTypeIndex = index
 		end)
@@ -2888,7 +2919,6 @@ function TreeTabClass:FindTimelessJewel()
 		controls.abyssAscendancySelect.selIndex = 1
 		wipeTable(timelessData.searchResults)
 		controls.searchTradeButton.enabled = false
-		controls.searchTradeCnButton.enabled = false
 		setAllocatedNodes()
 	end)
 	controls.closeButton = new("ButtonControl"):ButtonControl({"LEFT", controls.resetButton, "RIGHT"}, {buttonDivider, 0, buttonWidth, buttonHeight}, "Cancel", function()
@@ -2928,9 +2958,8 @@ function TreeTabClass:FindTimelessJewel()
 			end)
 			
 			controls.searchTradeButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
-			controls.searchTradeCnButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
 			controls.searchTradeButton.lastSearch = nil
-			controls.searchTradeButton.label = "Open Trade URL"
+			updateTradeButtonLabel()
 			controls.searchResults.highlightIndex = nil
 			controls.searchResults.selIndex = 1
 		else
@@ -2954,9 +2983,8 @@ function TreeTabClass:FindTimelessJewel()
 				end
 				t_sort(timelessData.searchResults, function(a, b) return a.total > b.total end)
 				controls.searchTradeButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
-				controls.searchTradeCnButton.enabled = timelessData.searchResults and #timelessData.searchResults > 0
 				controls.searchTradeButton.lastSearch = nil
-				controls.searchTradeButton.label = "Open Trade URL"
+				updateTradeButtonLabel()
 				controls.searchResults.highlightIndex = nil
 				controls.searchResults.selIndex = 1
 			end
